@@ -1,7 +1,7 @@
 
 # Coyote
 
-An HTTP Reverse Shell With E2EE Using RSA Encryption.
+A Windows HTTP Reverse Shell With E2EE. Using RSA Encryption.
 
 ## Requirements
 You'll need to install these 2 requirements for Coyote to work, Which are [Gin](github.com/gin-gonic/gin) and [Uuid](github.com/google/uuid)
