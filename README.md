@@ -26,13 +26,18 @@ go build
 The server will listen for specific endpoints that will allow the client to identify themselves, fetch commands and send output.
 
 ## Sending Commands
-We can send commands with a simple python script like this
-```python
-import requests
-requests.post('http://127.0.0.1/sendCommand', json = {"command": "echo hello!"})
+We can send commands to a Coyote client with ``interact.py``.
+
+## Output
+
+```
+$ python interact.py
+Coyote> echo hello!
+Sent Command!
+Output : hello!
+Coyote> cd
+Sent Command!
+Output : C:\Users\pseco\OneDrive\Desktop\Coyote\client
+Coyote> 
 ```
 
-## Todo
-- Allow for shared structs.
-- Make the client send the output back (encrypted). 
-- Make a program (with nice TUI) to send commands. 
