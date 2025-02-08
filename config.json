@@ -3,5 +3,7 @@
     "port": 80,
     
     "communicationEp": "command",
-    "recognitionEp": "client"
+    "recognitionEp": "client",
+    "sendCommandEp": "sendCommand",
+    "outputEp": "output"
 }

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -14,53 +15,11 @@ import (
 	"github.com/google/uuid"
 )
 
-type ServerConfig struct {
-	ServerHost      string `json:"serverHost"`
-	Port            int    `json:"port"`
-	CommunicationEp string `json:"communicationEp"`
-	RecognitionEp   string `json:"recognitionEp"`
-}
-type Security struct {
-	PrivateKey *rsa.PrivateKey
-	PublicKey  rsa.PublicKey
-}
-
-type Identification struct {
-	Id        string        `json:"id"`
-	Hostname  string        `json:"hostname"`
-	PublicKey rsa.PublicKey `json:"pubkey"`
-}
-
-type IdentificationResult struct {
-	PublicKey rsa.PublicKey
-}
-type EncryptedCommand struct {
-	EncryptedContent []byte
-}
-
-type CommandRequest struct {
-	Id string
-}
-
-type SendCommandInfo struct {
-	Command string `json:"command"`
-}
-
-type Command struct {
-	Id         string
-	Content    string
-	ReceivedAt time.Time
-}
-
-type Server struct {
-	Config    ServerConfig
-	Security  Security
-	Router    *gin.Engine
-	Clients   map[string]Identification
-	IssuedCmd Command
-}
+var EmptyCmd = &Command{}
+var EmptyOutput = &CommandOutput{}
 
 var FAILURE_MESSAGE = gin.H{"success": false}
+var SUCCESS_MESSAGE = gin.H{"success": true}
 
 func (server *Server) ConfigServer() error {
 	configFile, err := os.Open("../config.json")
@@ -69,7 +28,6 @@ func (server *Server) ConfigServer() error {
 		return err
 	}
 
-	gin.Default()
 	decoder := json.NewDecoder(configFile)
 	conf := ServerConfig{}
 
@@ -87,8 +45,10 @@ func (server *Server) ConfigServer() error {
 func (server *Server) InitServer() error {
 	router := gin.Default()
 	config := server.Config
+
 	server.Clients = make(map[string]Identification)
-	server.IssuedCmd = Command{Content: "N/A"}
+	server.IssuedCmd = EmptyCmd
+	server.LastOutput = EmptyOutput
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 
@@ -143,14 +103,37 @@ func (server *Server) InitServer() error {
 			context.JSON(http.StatusUnauthorized, FAILURE_MESSAGE)
 		}
 
+		context.JSON(http.StatusOK, gin.H{"commandId": command.Id, "encryptedContent": encryptedBytes})
+	})
+
+	router.POST(config.CommunicationEp, func(context *gin.Context) {
+		serverSec := server.Security
+
+		encCmdOutput := EncryptedCommandResult{}
+		err := context.BindJSON(&encCmdOutput)
+
 		if err != nil {
 			context.JSON(http.StatusUnauthorized, FAILURE_MESSAGE)
 		}
 
-		context.JSON(http.StatusOK, gin.H{"commandId": command.Id, "encryptedContent": encryptedBytes})
+		encOutput := encCmdOutput.EncryptedOutput
+
+		outputBytes, err := serverSec.PrivateKey.Decrypt(nil, encOutput, &rsa.OAEPOptions{Hash: crypto.SHA256})
+
+		if err != nil {
+			context.JSON(http.StatusUnauthorized, FAILURE_MESSAGE)
+		}
+
+		server.LastOutput = &CommandOutput{
+			Output: string(outputBytes),
+			Id:     encCmdOutput.Id,
+		}
+
+		context.JSON(http.StatusOK, SUCCESS_MESSAGE)
+
 	})
 
-	router.POST("/sendCommand", func(context *gin.Context) {
+	router.POST(config.SendCommandEp, func(context *gin.Context) {
 		sendCmdInfo := SendCommandInfo{}
 
 		err := context.BindJSON(&sendCmdInfo)
@@ -159,13 +142,26 @@ func (server *Server) InitServer() error {
 			context.JSON(http.StatusUnauthorized, FAILURE_MESSAGE)
 		}
 
-		// in the next version, it will be a queue instead of just a structure
-		server.IssuedCmd = Command{
-			Id:         uuid.New().String(),
+		cmdId := uuid.New()
+
+		server.IssuedCmd = &Command{
+			Id:         cmdId.String(),
 			Content:    sendCmdInfo.Command,
 			ReceivedAt: time.Now(),
 		}
 
+		context.JSON(http.StatusOK, SUCCESS_MESSAGE)
+
+	})
+
+	router.GET(config.OutputEp, func(context *gin.Context) {
+		lastOutput := server.LastOutput
+
+		if lastOutput == EmptyOutput {
+			context.JSON(http.StatusUnauthorized, FAILURE_MESSAGE)
+		}
+
+		context.JSON(http.StatusOK, gin.H{"cmdId": lastOutput.Id, "output": lastOutput.Output})
 	})
 
 	server.Router = router

