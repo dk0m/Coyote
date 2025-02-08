@@ -1,0 +1,7 @@
+{
+    "serverHost": "localhost",
+    "port": 80,
+    
+    "communicationEp": "command",
+    "recognitionEp": "client"
+}
