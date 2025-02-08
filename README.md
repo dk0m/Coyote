@@ -40,4 +40,5 @@ Sent Command!
 Output : C:\Users\pseco\OneDrive\Desktop\Coyote\client
 Coyote> 
 ```
-
+## Improving It
+You can use this project as a base for a secure HTTP-Based remote administration tool, Right now it can only execute simple windows shell commands, You can also make a web panel for communication instead of using a python script, As long as you can send requests to the Coyote server, You can do everything.
